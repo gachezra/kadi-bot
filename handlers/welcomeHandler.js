@@ -1,25 +1,16 @@
 const { Markup } = require('telegraf');
 
-async function handleWelcome(ctx, isEdit = false) {
-  const keyboard = Markup.inlineKeyboard([
-    [Markup.button.callback('🔄 Refresh Content', 'refresh')],
-    [Markup.button.callback('⚙️ Settings', 'settings')],
-    [Markup.button.callback('❓ Help', 'help')]
-  ]);
+async function handleWelcome(ctx) {
+  try {
+    const mainMenu = Markup.inlineKeyboard([
+      [Markup.button.callback('📊 View Statistics', 'stats')],
+      [Markup.button.callback('👥 Manage Groups', 'groups')],
+      [Markup.button.callback('⚙️ Settings', 'settings')]
+    ]);
 
-  const content = `
-Welcome to the Dynamic Bot!
-
-Current Time: ${new Date().toLocaleTimeString()}
-Status: Active
-  `;
-
-  if (isEdit && ctx.callbackQuery) {
-    // Edit existing message
-    await ctx.editMessageText(content, keyboard);
-  } else {
-    // Send new message
-    await ctx.reply(content, keyboard);
+    await ctx.reply('Welcome to the Bot! Choose an option:', mainMenu);
+  } catch (error) {
+    console.error('Error in handleWelcome:', error);
   }
 }
 

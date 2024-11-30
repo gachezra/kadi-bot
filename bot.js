@@ -2,98 +2,71 @@ const { Telegraf, Markup } = require('telegraf');
 const { handleWelcome } = require('./handlers/welcomeHandler');
 require('dotenv').config();
 
-// Initialize bot with token
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
-// Handle /start command
-bot.command('start', async (ctx) => {
-  await handleWelcome(ctx);
+// Start command shows the main menu
+bot.start(handleWelcome);
+
+// Handle Statistics button
+bot.action('stats', async (ctx) => {
+  const statsKeyboard = Markup.inlineKeyboard([
+    [Markup.button.callback('Today', 'stats_today')],
+    [Markup.button.callback('This Week', 'stats_week')],
+    [Markup.button.callback('« Back', 'back_main')]
+  ]);
+  
+  await ctx.editMessageText('📊 Statistics Menu:', statsKeyboard);
 });
 
-// Handle /creategroup command
-bot.command('creategroup', async (ctx) => {
-  try {
-    // Extract group name from message
-    const groupName = ctx.message.text.split(' ').slice(1).join(' ');
-    
-    if (!groupName) {
-      return await ctx.reply('Please provide a group name: /creategroup <name>');
-    }
-
-    // Create supergroup
-    const chatCreated = await ctx.telegram.createChatInviteLink(ctx.chat.id, {
-      name: groupName,
-      creates_join_request: true // This makes the group private by requiring join approval
-    });
-
-    // Set restrictive permissions for the group
-    await ctx.telegram.setChatPermissions(chatCreated.chat.id, {
-      can_send_messages: false,
-      can_send_media_messages: false,
-      can_send_polls: false,
-      can_send_other_messages: false,
-      can_add_web_page_previews: false,
-      can_change_info: false,
-      can_invite_users: false,
-      can_pin_messages: false
-    });
-
-    // Make bot admin
-    await ctx.telegram.promoteChatMember(chatCreated.chat.id, ctx.botInfo.id, {
-      can_manage_chat: true,
-      can_post_messages: true,
-      can_edit_messages: true,
-      can_delete_messages: true,
-      can_manage_video_chats: true,
-      can_restrict_members: true,
-      can_promote_members: true,
-      can_change_info: true,
-      can_invite_users: true,
-      can_pin_messages: true
-    });
-
-    await ctx.reply(`Created private group: ${groupName}\nInvite link: ${chatCreated.invite_link}`);
-  } catch (error) {
-    console.error('Error creating group:', error);
-    await ctx.reply('Failed to create group. Make sure the bot has the necessary permissions.');
-  }
+// Handle Groups button
+bot.action('groups', async (ctx) => {
+  const groupsKeyboard = Markup.inlineKeyboard([
+    [Markup.button.callback('Create Group', 'create_group')],
+    [Markup.button.callback('List Groups', 'list_groups')],
+    [Markup.button.callback('« Back', 'back_main')]
+  ]);
+  
+  await ctx.editMessageText('👥 Group Management:', groupsKeyboard);
 });
 
-// Handle callback queries (button clicks)
-bot.on('callback_query', async (ctx) => {
-  try {
-    const action = ctx.callbackQuery.data;
-    
-    switch (action) {
-      case 'refresh':
-        await handleWelcome(ctx, true);
-        break;
-      case 'settings':
-        await ctx.answerCbQuery('Opening settings...');
-        await ctx.reply('⚙️ Settings Menu:', 
-          Markup.inlineKeyboard([
-            [Markup.button.callback('Notifications', 'settings_notifications')],
-            [Markup.button.callback('Privacy', 'settings_privacy')],
-            [Markup.button.callback('Back to Main Menu', 'back_main')]
-          ])
-        );
-        break;
-      case 'help':
-        await ctx.answerCbQuery('Opening help...');
-        await ctx.reply('Available commands:\n' +
-          '/start - Show main menu\n' +
-          '/creategroup <name> - Create a private group');
-        break;
-      case 'back_main':
-        await handleWelcome(ctx, true);
-        break;
-      default:
-        await ctx.answerCbQuery();
-    }
-  } catch (error) {
-    console.error('Error handling callback:', error);
-    await ctx.answerCbQuery('An error occurred');
-  }
+// Handle Settings button
+bot.action('settings', async (ctx) => {
+  const settingsKeyboard = Markup.inlineKeyboard([
+    [Markup.button.callback('Notifications', 'settings_notif')],
+    [Markup.button.callback('Privacy', 'settings_privacy')],
+    [Markup.button.callback('« Back', 'back_main')]
+  ]);
+  
+  await ctx.editMessageText('⚙️ Settings Menu:', settingsKeyboard);
+});
+
+// Handle back button
+bot.action('back_main', async (ctx) => {
+  const mainMenu = Markup.inlineKeyboard([
+    [Markup.button.callback('📊 View Statistics', 'stats')],
+    [Markup.button.callback('👥 Manage Groups', 'groups')],
+    [Markup.button.callback('⚙️ Settings', 'settings')]
+  ]);
+  
+  await ctx.editMessageText('Main Menu:', mainMenu);
+});
+
+// Example of handling a specific submenu action
+bot.action('stats_today', async (ctx) => {
+  // Generate some dummy stats
+  const currentTime = new Date().toLocaleTimeString();
+  const statsText = `
+Today's Statistics (as of ${currentTime}):
+• Users: 150
+• Messages: 1,024
+• Active Groups: 5
+  `;
+  
+  const backButton = Markup.inlineKeyboard([
+      [Markup.button.callback('« Back to Stats', 'stats')]
+  ]);
+  
+  await ctx.editMessageText(statsText, backButton);
 });
 
 // Error handling
@@ -102,10 +75,6 @@ bot.catch((err, ctx) => {
 });
 
 // Start bot
-bot.launch()
-  .then(() => console.log('Bot is running...'))
-  .catch(err => console.error('Bot launch failed:', err));
-
-// Enable graceful stop
-process.once('SIGINT', () => bot.stop('SIGINT'));
-process.once('SIGTERM', () => bot.stop('SIGTERM'));
+bot.launch().then(() => {
+  console.log('Bot started');
+}).catch(err => console.error(err));
