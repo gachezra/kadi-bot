@@ -1,16 +1,21 @@
-const { Markup } = require('telegraf');
-
 async function handleWelcome(ctx) {
   try {
-    const mainMenu = Markup.inlineKeyboard([
-      [Markup.button.callback('📊 View Statistics', 'stats')],
-      [Markup.button.callback('👥 Manage Groups', 'groups')],
-      [Markup.button.callback('⚙️ Settings', 'settings')]
-    ]);
-
-    await ctx.reply('Welcome to the Bot! Choose an option:', mainMenu);
+    await ctx.reply('Welcome to NikoKadi',
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: 'Create Room', callback_data: 'create' },
+              { text: 'Show Rooms', callback_data: 'groups' }
+            ],
+            [{ text: 'Invite Other Players', callback_data: 'settings' }]
+          ]
+        }
+      }
+    );
   } catch (error) {
     console.error('Error in handleWelcome:', error);
+    ctx.reply('Sorry, there was an error processing your request.');
   }
 }
 

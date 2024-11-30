@@ -1,0 +1,58 @@
+const { cardUrls } = require('../utils/cardUtils');
+
+async function handleWelcome(ctx) {
+  try {
+    // Always show Ace of Hearts as the top card
+    const topCardUrl = cardUrls['A♥'];
+
+    // Get 3 random cards for the bottom row
+    const randomCards = getRandomCards(3);
+    
+    // Send the welcome text first
+    await ctx.reply('Top Card');
+
+    // Send the initial image with all buttons
+    await ctx.replyWithPhoto(
+      topCardUrl,
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: 'Drop', callback_data: 'stats' },
+              { text: 'Pick', callback_data: 'groups' }
+            ],
+            [{ text: 'NikoKadi', callback_data: 'settings' }],
+            // Add the random cards row
+            randomCards.map(card => ({
+              text: card,
+              callback_data: `card:${card}`
+            }))
+          ]
+        }
+      }
+    );
+  } catch (error) {
+    console.error('Error in handleWelcome:', error);
+    ctx.reply('Sorry, there was an error processing your request.');
+  }
+}
+
+// Helper function to get random cards
+function getRandomCards(count) {
+  const allCards = Object.keys(cardUrls);
+  const randomCards = [];
+  
+  while (randomCards.length < count) {
+    const randomIndex = Math.floor(Math.random() * allCards.length);
+    const card = allCards[randomIndex];
+    
+    // Avoid duplicates
+    if (!randomCards.includes(card)) {
+      randomCards.push(card);
+    }
+  }
+  
+  return randomCards;
+}
+
+module.exports = { handleWelcome };

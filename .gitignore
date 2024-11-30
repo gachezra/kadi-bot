@@ -1,3 +1,9 @@
 /node_modules
 
 .env
+
+/cards
+
+.generate.js
+
+.card-urls.txt
