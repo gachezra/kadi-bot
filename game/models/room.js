@@ -67,8 +67,6 @@ class Room {
     const deck = new Deck();
     deck.shuffle();
 
-    console.log('This is the deck: ', deck)
-
     // Deal cards to the owner
     const ownerHand = deck.deal(numToDeal);
 
@@ -114,7 +112,7 @@ class Room {
 
     await gameDataService.initializeGameData(roomId)
 
-    await userService.createRoom(owner);
+    await userService.createRoom(owner, ownerName);
 
     await Room.startChat(roomId);
 
@@ -123,7 +121,7 @@ class Room {
   }
 
   static async getRoom(roomId) {
-    const roomDoc = await db.collection('rooms').doc(roomId).get();
+    const roomDoc = await db.collection('rooms').doc(`${roomId}`).get();
     console.log('Room ', roomId, 'document exists:', roomDoc.exists);
     
     if (roomDoc.exists) {
@@ -150,7 +148,7 @@ class Room {
     console.error('Room not found for ID:', roomId); // Log an error if the room is not found
   }
 
-  static async joinRoom(roomId, player, roomCode) {
+  static async joinRoom(roomId, player) {
     const roomDoc = await db.collection('rooms').doc(roomId).get();
     if (roomDoc.exists) {
       const roomData = roomDoc.data();
@@ -175,11 +173,6 @@ class Room {
       // Check if the room is full
       if (room.playerList.length >= room.numPlayers) {
         throw new Error('Room is full');
-      }
-
-      // Check if the player is the owner or has the correct room code
-      if (player.userId !== room.owner && room.roomCode !== roomCode) {
-        throw new Error('Invalid room code');
       }
 
       // Deal cards to the new player

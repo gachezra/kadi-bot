@@ -2,17 +2,31 @@ const { db } = require('../firebase/firebase');
 const gameDataService = require('./gameDataService')
 
 const userService = {
-  createRoom: async (userId) => {
+  createRoom: async (userId, username) => {
     try {
-      const userRef = db.collection('userData').doc(userId);
-      
-      // Get the current user data
-      const userDoc = await userRef.get();
+      const userDoc = await db.collection('users').doc(`${userId}`).get();
       
       if (!userDoc.exists) {
-        // Initialize user data if it doesn't exist
-        const userData = {
+        // Create the user with userId as the document ID
+        console.log(`User with ID ${userId} not found. Creating a new user.`);
+        const newUser = {
           userId,
+          username,
+          createdAt: new Date()
+        };
+        await db.collection('users').doc(`${userId}`).set(newUser);
+        console.log(`User created: ${JSON.stringify(newUser)}`);
+      }
+  
+      // Check if the user data exists in the `userData` collection
+      const userDataRef = db.collection('userData').doc(`${userId}`);
+      const userDataDoc = await userDataRef.get();
+  
+      if (!userDataDoc.exists) {
+        // Initialize user data if it doesn't exist
+        const initialUserData = {
+          userId,
+          username,
           gamesStarted: 1,
           gamesTerminated: 0,
           totalTimePlayed: 0,
@@ -21,21 +35,19 @@ const userService = {
           highestWinStreak: 0,
           lastPlayedAt: new Date()
         };
-        
-        await userRef.set(userData);
+        await userDataRef.set(initialUserData);
         console.log(`Initialized user data for user: ${userId}`);
       } else {
-        // Increment gamesStarted if the user data already exists
-        const userData = userDoc.data();
-        await userRef.update({
+        // Increment gamesStarted if user data already exists
+        const userData = userDataDoc.data();
+        await userDataRef.update({
           gamesStarted: (userData.gamesStarted || 0) + 1,
+          lastPlayedAt: new Date()
         });
         console.log(`Updated room creation stats for user: ${userId}`);
       }
-  
-      // No need to update gamesPlayed here, as it will be updated when the game ends
     } catch (error) {
-      console.error('Error updating room creation stats:', error);
+      console.error('Error creating room:', error);
       throw error;
     }
   },
@@ -81,7 +93,7 @@ const userService = {
       const roomData = roomDoc.data();
       const gameData = gameDataDoc.data();
 
-      const userRef = db.collection('userData').doc(userId);
+      const userRef = db.collection('userData').doc(`${userId}`);
       const userDoc = await userRef.get();
 
       let userData = userDoc.exists ? userDoc.data() : {

@@ -1,47 +1,63 @@
-const { Telegraf, Markup } = require('telegraf');
-const { handleWelcome } = require('./handlers/welcomeHandler');
+const { Telegraf } = require('telegraf');
+const { 
+  handleWelcome,
+  handleCreateGroup,
+  handleCheckGroups,
+  handleHelp 
+} = require('./handlers/welcomeHandler');
+const {
+  handleDecreasePlayer,
+  handleIncreasePlayer,
+  handleGameBegin,
+  handleGameStart
+} = require('./handlers/gameHandler');
+const { handleJoinRoom } = require('./handlers/roomHandler');
+const {
+  handleCardSelection,
+  handleClearSelection,
+  handlePickCard,
+  handleDropCards
+} = require('./handlers/userHandler');
+
 require('dotenv').config();
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
-// Start command shows the main menu
-bot.start(handleWelcome);
+// Command handlers
+bot.command('start', handleWelcome);
+bot.command('play', handleGameStart);
 
-// Handle card selection callbacks
-bot.action('create', async (ctx) => {
+// Welcome menu actions
+bot.action('create_group', handleCreateGroup);
+bot.action('check_groups', handleCheckGroups);
+bot.action('help', handleHelp);
+bot.action('back_to_menu', async (ctx) => {
   try {
-    const createGroup = `To create a room:
--Create a group and add me as an admin.
--An invitation link will be created, share it with your friends
-    `
-    await ctx.reply(createGroup);
-    // await ctx.editMessageMedia(
-    //   {
-    //     type: 'photo',
-    //     media: cardUrl
-    //   },
-    //   {
-    //     reply_markup: {
-    //       inline_keyboard: [
-    //         [
-    //           { text: 'Drop', callback_data: 'stats' },
-    //           { text: 'Pick', callback_data: 'groups' }
-    //         ],
-    //         [{ text: 'NikoKadi', callback_data: 'settings' }],
-    //         randomCards.map(card => ({
-    //           text: card,
-    //           callback_data: `card:${card}`
-    //         }))
-    //       ]
-    //     }
-    //   }
-    // );
-
-    // Answer the callback query to remove the loading state
+    await handleWelcome(ctx);
+    await ctx.answerCbQuery();
   } catch (error) {
-    console.error('Error handling card selection:', error);
-    await ctx.answerCbQuery('Sorry, there was an error processing your selection.');
+    console.error('Error returning to menu:', error);
+    await ctx.answerCbQuery('Error returning to menu');
   }
+});
+
+// Game setup actions
+bot.action('decrease_players', handleDecreasePlayer);
+bot.action('increase_players', handleIncreasePlayer);
+bot.action('start_game', handleGameBegin);
+
+// Room actions
+bot.action(/^join_game_[\w]+/, handleJoinRoom);
+
+// Card selection and game actions
+bot.action(/^select_card_.*$/, handleCardSelection);
+bot.action('clear_selection', handleClearSelection);
+bot.action('pick_card', handlePickCard);
+bot.action('drop_cards', handleDropCards);
+
+// debuging purposes
+bot.on('callback_query', (ctx) => {
+  console.log('Received callback query:', ctx.callbackQuery.data);
 });
 
 // Error handling
@@ -50,6 +66,10 @@ bot.catch((err, ctx) => {
 });
 
 // Start bot
-bot.launch().then(() => {
-  console.log('Bot started');
-}).catch(err => console.error(err));
+bot.launch()
+  .then(() => console.log('Bot started'))
+  .catch(err => console.error('Bot startup error:', err));
+
+// Enable graceful stop
+process.once('SIGINT', () => bot.stop('SIGINT'));
+process.once('SIGTERM', () => bot.stop('SIGTERM'));
