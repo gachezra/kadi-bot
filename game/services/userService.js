@@ -54,7 +54,7 @@ const userService = {
 
   updateUserGamesAndWins: async (userId) => {
     try {
-      const userRef = db.collection('userData').doc(userId);
+      const userRef = db.collection('userData').doc(`${userId}`);
       const userDoc = await userRef.get();
 
       if (!userDoc.exists) {

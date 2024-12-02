@@ -2,12 +2,6 @@ const { Markup } = require('telegraf');
 const Room = require('../game/models/room');
 const { cardUrls } = require('../utils/cardUtils');
 
-// Helper function to check if message is from a group
-function isGroup(ctx) {
-  return ctx.chat?.type === 'group' || ctx.chat?.type === 'supergroup';
-}
-
-// Helper function to create player count buttons
 function createPlayerCountMarkup(currentCount = 2) {
   return Markup.inlineKeyboard([
     [
@@ -21,26 +15,19 @@ function createPlayerCountMarkup(currentCount = 2) {
 
 async function handleGameStart(ctx) {
   try {
-    if (!isGroup(ctx)) {
-      return await ctx.reply(
-        '⚠️ This command can only be used in groups. Please add me to a group first!'
-      );
-    }
-
-    await ctx.reply(
+    const gameSetupMsg = 
       `*🎮 NikoKadi Game Setup*\n\n` +
       `Welcome to NikoKadi! Here's how to play:\n\n` +
       `1️⃣ Select the number of players (2-6)\n` +
       `2️⃣ Click "Start Game" when ready\n` +
-      `3️⃣ Players must start a private chat with me (click my username) before joining\n` +
-      `4️⃣ Each player will receive their cards in private message\n\n` +
-      `Important: Make sure you've started a chat with me before joining!\n\n` +
-      `Select number of players:`,
-      {
-        parse_mode: 'Markdown',
-        ...createPlayerCountMarkup()
-      }
-    );
+      `3️⃣ Share your game invite link with other players\n` +
+      `4️⃣ Wait for players to join\n\n` +
+      `Select number of players:`;
+
+    await ctx.reply(gameSetupMsg, {
+      parse_mode: 'Markdown',
+      ...createPlayerCountMarkup()
+    });
   } catch (error) {
     console.error('Error in game start handler:', error);
     await ctx.reply('Sorry, there was an error starting the game. Please try again.');
@@ -87,10 +74,8 @@ async function handleIncreasePlayer(ctx) {
 
 async function handleGameBegin(ctx) {
   try {
-    console.log('Game begin handler triggered');
     const currentText = ctx.callbackQuery.message.reply_markup.inline_keyboard[0][1].text;
     const numPlayers = parseInt(currentText.split(' ')[0]);
-    console.log('Creating room with players:', numPlayers);
 
     const owner = ctx.callbackQuery.from.id;
     const ownerName = ctx.callbackQuery.from.username || 
@@ -101,7 +86,21 @@ async function handleGameBegin(ctx) {
     try {
       const room = await Room.create(Number(numPlayers), Number(numToDeal), owner, ownerName);
       
-      // Use the room handler to display initial game state
+      // Generate invite link
+      const inviteLink = `https://t.me/nikokadibot?start=join_${room.roomId}`.replace(/_/g, '\\_');;
+      
+      await ctx.editMessageText(
+        `*🎮 Game Room Created!*\n\n` +
+        `Share this link with other players to join:\n` +
+        `${inviteLink}\n\n` +
+        `Waiting for players (1/${numPlayers})...`,
+        { 
+          parse_mode: 'Markdown',
+          disable_web_page_preview: true
+        }
+      );
+
+      // Display initial game state to owner
       const roomHandler = require('./roomHandler');
       await roomHandler.handleRoomDisplay(ctx, room.roomId);
       
@@ -124,6 +123,5 @@ module.exports = {
   handleGameStart,
   handleDecreasePlayer,
   handleIncreasePlayer,
-  handleGameBegin,
-  isGroup
+  handleGameBegin
 };

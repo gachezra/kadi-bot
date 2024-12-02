@@ -41,31 +41,17 @@ async function displayPlayerInterface(ctx, roomId, userId) {
       return;
     }
 
-    // Store user-room relationship
     userRoomMap.set(userId, roomId);
 
-    // Send private message to player
-    try {
-      await ctx.telegram.sendPhoto(
-        userId,
-        { url: cardUrls[room.clientRoom.topCard] },
-        { caption: 'Top Card' }
-      );
-      await ctx.telegram.sendMessage(
-        userId,
-        `*Your Cards*\n` +
-        `Select cards in order to play them:`,
-        {
-          parse_mode: 'Markdown',
-          ...createCardSelectionMarkup(player.hand, userId)
-        }
-      );
-    } catch (error) {
-      // Handle case where bot can't message user
-      await ctx.reply(
-        `@${player.username}, I cannot send you private messages. Please start a private chat with me first 👉🏽 @nikokadibot`
-      );
-    }
+    await ctx.telegram.sendMessage(
+      userId,
+      `*Your Cards*\n` +
+      `Select cards in order to play them:`,
+      {
+        parse_mode: 'Markdown',
+        ...createCardSelectionMarkup(player.hand, userId)
+      }
+    );
 
   } catch (error) {
     console.error('Error displaying player interface:', error);
@@ -87,13 +73,16 @@ async function handleCardSelection(ctx) {
     
     selectedCards.set(userId, userSelected);
 
-    const roomId = userRoomMap.get(userId);
-    if (!roomId) {
-      throw new Error('Room ID not found for user');
-    }
+    // Update existing message's markup instead of sending new message
+    await ctx.editMessageReplyMarkup(
+      createCardSelectionMarkup(
+        (await Room.getRoom(userRoomMap.get(userId))).clientRoom.playerList
+          .find(p => p.userId === userId).hand,
+        userId
+      ).reply_markup
+    );
 
-    await displayPlayerInterface(ctx, roomId, userId);
-    await ctx.answerCbQuery(`Card ${card} ${userSelected.includes(card) ? 'selected' : 'unselected'}`);
+    await ctx.answerCbQuery();
 
   } catch (error) {
     console.error('Error handling card selection:', error);
@@ -106,12 +95,15 @@ async function handleClearSelection(ctx) {
     const userId = ctx.from.id;
     selectedCards.delete(userId);
 
-    const roomId = userRoomMap.get(userId);
-    if (!roomId) {
-      throw new Error('Room ID not found for user');
-    }
+    // Update existing message's markup
+    await ctx.editMessageReplyMarkup(
+      createCardSelectionMarkup(
+        (await Room.getRoom(userRoomMap.get(userId))).clientRoom.playerList
+          .find(p => p.userId === userId).hand,
+        userId
+      ).reply_markup
+    );
 
-    await displayPlayerInterface(ctx, roomId, userId);
     await ctx.answerCbQuery('Selection cleared');
 
   } catch (error) {
@@ -126,7 +118,12 @@ async function handlePickCard(ctx) {
     const roomId = userRoomMap.get(userId);
     let action = 'pick';
     await ctx.answerCbQuery('Picked a card');
-    await Room.makeMove(roomId, userId, action)
+    await Room.makeMove(roomId, userId, action);
+
+    // Update interface after picking
+    const room = await Room.getRoom(roomId);
+    const roomHandler = require('./roomHandler');
+    await roomHandler.handleRoomDisplay(ctx, roomId);
 
   } catch (error) {
     console.error('Error picking card:', error);
@@ -145,13 +142,14 @@ async function handleDropCards(ctx) {
       return await ctx.answerCbQuery('No cards selected!');
     }
 
-    // Add drop cards logic here
     selectedCards.delete(userId);
-    await ctx.answerCbQuery(`Dropped ${userSelected.length} cards`);
-
     await Room.makeMove(roomId, userId, action, userSelected);
 
-    await this.displayPlayerInterface(ctx, roomId, userId);
+    // Update all players' interfaces after dropping cards
+    const roomHandler = require('./roomHandler');
+    await roomHandler.handleRoomDisplay(ctx, roomId);
+
+    await ctx.answerCbQuery(`Dropped ${userSelected.length} cards`);
 
   } catch (error) {
     console.error('Error dropping cards:', error);

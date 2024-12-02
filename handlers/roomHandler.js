@@ -21,7 +21,7 @@ function createGameStatusMarkup(room) {
   }
 
   const gameInfoRow = [{
-    text: `Cards in Deck: ${room.clientRoom.stack?.length || '?'} | Direction: ${room.clientRoom.isClockwise ? '➡️' : '⬅️'}`,
+    text: `Cards in Deck: ${room.clientRoom.deck?.length || '?'} | Direction: ${room.clientRoom.isClockwise ? '➡️' : '⬅️'}`,
     callback_data: 'status_display'
   }];
 
@@ -37,14 +37,12 @@ function createGameStatusMarkup(room) {
 
   return Markup.inlineKeyboard([
     ...playerRows,
-    gameInfoRow,
-    ...joinRow
+    gameInfoRow
   ]);
 }
 
 async function handleRoomDisplay(ctx, roomId) {
   try {
-    console.log('Room display handler triggered for room:', roomId);
     const room = await Room.getRoom(roomId);
     if (!room) {
       return await ctx.reply('❌ Room not found or has expired.');
@@ -55,31 +53,32 @@ async function handleRoomDisplay(ctx, roomId) {
       return await ctx.reply('❌ Error loading game data. Please try again.');
     }
 
-    // Display game status in group
-    await ctx.reply(
-      `*🎮 Current Game Status*\n` +
-      `Room ID: ${roomId}\n` +
-      `Top Card:`,
-      {
-        parse_mode: 'Markdown'
-      }
-    );
+    // Send game status to each player
+    for (const player of room.clientRoom.playerList) {
+      const statusMessage = 
+        `*🎮 Game Status Update*\n` +
+        `Room ID: ${roomId}\n` +
+        `Your turn: ${player.userId === room.clientRoom.currentPlayer ? 'Yes ✅' : 'No ⏳'}\n\n` +
+        `Players in game:`;
 
-    // Show top card in group
-    await ctx.replyWithPhoto(
-      cardUrls[room.clientRoom.topCard],
-      { caption: '🎴 Current Top Card' }
-    );
+      await ctx.telegram.sendMessage(
+        player.userId,
+        statusMessage,
+        {
+          parse_mode: 'Markdown',
+          ...createGameStatusMarkup(room)
+        }
+      );
 
-    await ctx.reply(
-      `Players in game:`,
-      {
-        parse_mode: 'Markdown',
-        ...createGameStatusMarkup(room)
-      }
-    );
+      // Send top card to each player
+      await ctx.telegram.sendPhoto(
+        player.userId,
+        cardUrls[room.clientRoom.topCard],
+        { caption: '🎴 Current Top Card' }
+      );
+    }
 
-    // Send private hands to each player
+    // Update player interfaces
     const userHandler = require('./userHandler');
     for (const player of room.clientRoom.playerList) {
       await userHandler.displayPlayerInterface(ctx, roomId, player.userId);
@@ -91,51 +90,44 @@ async function handleRoomDisplay(ctx, roomId) {
   }
 }
 
-async function handleJoinRoom(ctx) {
+async function handleJoinRoom(ctx, roomId) {
   try {
-    const roomId = ctx.callbackQuery.data.split('_')[2];
     const userId = ctx.from.id;
     const username = ctx.from.username || 
       `${ctx.from.first_name}${ctx.from.last_name ? ' ' + ctx.from.last_name : ''}`;
 
-    // Check if bot can message user
-    try {
-      await ctx.telegram.sendMessage(
-        userId,
-        '🎮 Checking if I can send you private messages...'
-      );
-    } catch (error) {
-      return await ctx.answerCbQuery(
-        '❌ Please start a private chat with me first by clicking my username!',
-        { show_alert: true }
-      );
-    }
-
     const room = await Room.getRoom(roomId);
     
     if (!room || !room.clientRoom) {
-      return await ctx.answerCbQuery('❌ Room not found or has expired.');
+      return await ctx.reply('❌ Room not found or has expired.');
     }
 
     const maxPlayers = room.clientRoom.maxPlayers || 6;
     if (room.clientRoom.playerList.length >= maxPlayers) {
-      return await ctx.answerCbQuery('❌ Room is full!');
+      return await ctx.reply('❌ Room is full!');
     }
 
     if (room.clientRoom.playerList.some(p => p.userId === userId)) {
-      return await ctx.answerCbQuery('✋ You are already in this game!');
+      return await ctx.reply('✋ You are already in this game!');
     }
 
     // Add player to room
     await Room.joinRoom(roomId, { userId, username, hand: [] });
     
+    // Notify all players
+    for (const player of room.clientRoom.playerList) {
+      await ctx.telegram.sendMessage(
+        player.userId,
+        `👋 ${username} has joined the game!`
+      );
+    }
+    
     // Refresh the display for all players
     await handleRoomDisplay(ctx, roomId);
-    await ctx.answerCbQuery('✅ Successfully joined the game!');
 
   } catch (error) {
     console.error('Error in join room handler:', error);
-    await ctx.answerCbQuery('Error joining the room');
+    await ctx.reply('Error joining the room');
   }
 }
 

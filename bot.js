@@ -1,8 +1,6 @@
 const { Telegraf } = require('telegraf');
 const { 
   handleWelcome,
-  handleCreateGroup,
-  handleCheckGroups,
   handleHelp 
 } = require('./handlers/welcomeHandler');
 const {
@@ -18,36 +16,31 @@ const {
   handlePickCard,
   handleDropCards
 } = require('./handlers/userHandler');
+const { handleChat } = require('./handlers/chatHandler');
 
 require('dotenv').config();
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
 // Command handlers
-bot.command('start', handleWelcome);
-bot.command('play', handleGameStart);
-
-// Welcome menu actions
-bot.action('create_group', handleCreateGroup);
-bot.action('check_groups', handleCheckGroups);
-bot.action('help', handleHelp);
-bot.action('back_to_menu', async (ctx) => {
-  try {
+bot.command('start', async (ctx) => {
+  const startPayload = ctx.message.text.split(' ')[1];
+  
+  if (startPayload && startPayload.startsWith('join_')) {
+    const roomId = startPayload.replace('join_', '');
+    await handleJoinRoom(ctx, roomId);
+  } else {
     await handleWelcome(ctx);
-    await ctx.answerCbQuery();
-  } catch (error) {
-    console.error('Error returning to menu:', error);
-    await ctx.answerCbQuery('Error returning to menu');
   }
 });
+
+bot.command('play', handleGameStart);
+bot.command('help', handleHelp);
 
 // Game setup actions
 bot.action('decrease_players', handleDecreasePlayer);
 bot.action('increase_players', handleIncreasePlayer);
 bot.action('start_game', handleGameBegin);
-
-// Room actions
-bot.action(/^join_game_[\w]+/, handleJoinRoom);
 
 // Card selection and game actions
 bot.action(/^select_card_.*$/, handleCardSelection);
@@ -55,10 +48,8 @@ bot.action('clear_selection', handleClearSelection);
 bot.action('pick_card', handlePickCard);
 bot.action('drop_cards', handleDropCards);
 
-// debuging purposes
-bot.on('callback_query', (ctx) => {
-  console.log('Received callback query:', ctx.callbackQuery.data);
-});
+// Handle regular messages (chat between players)
+bot.on('text', handleChat);
 
 // Error handling
 bot.catch((err, ctx) => {
@@ -72,4 +63,4 @@ bot.launch()
 
 // Enable graceful stop
 process.once('SIGINT', () => bot.stop('SIGINT'));
-process.once('SIGTERM', () => bot.stop('SIGTERM'));
+process.once('SIGTERM', () => bot.stop('SIGTERM'))
