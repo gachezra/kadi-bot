@@ -45,7 +45,7 @@ async function createCardSelectionMarkup(hand, userId) {
 
   const miniAppButton = [{
     text: '🎧 Start Audio',
-    web_app: { url: 'https://your-mini-app-url.com' }
+    web_app: { url: 'https://kadi.pexmon.one' }
   }];
 
   const controlButtons = [
