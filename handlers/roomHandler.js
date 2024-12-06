@@ -21,7 +21,7 @@ function createGameStatusMarkup(room) {
   }
 
   const gameInfoRow = [{
-    text: `Cards in Deck: ${room.clientRoom.deck?.length || '?'} | Direction: ${room.clientRoom.isClockwise ? '➡️' : '⬅️'}`,
+    text: `Cards in Stack: ${room.clientRoom.stack?.length || '?'} | Direction: ${room.clientRoom.isClockwise ? '➡️' : '⬅️'}`,
     callback_data: 'status_display'
   }];
 

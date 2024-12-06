@@ -1,12 +1,37 @@
 const { Markup } = require('telegraf');
 const Room = require('../game/models/room');
 const { cardUrls } = require('../utils/cardUtils');
+const Redis = require('ioredis');
+const redis = new Redis(`${process.env.REDIS}`);
 
-const selectedCards = new Map();
-const userRoomMap = new Map();
+// Redis helper functions
+async function setSelectedCards(userId, cards) {
+  await redis.set(`user:${userId}:selected_cards`, JSON.stringify(cards));
+  // Set TTL for 1 hour to prevent stale data
+  await redis.expire(`user:${userId}:selected_cards`, 3600);
+}
 
-function createCardSelectionMarkup(hand, userId) {
-  const userSelected = selectedCards.get(userId) || [];
+async function getSelectedCards(userId) {
+  const cards = await redis.get(`user:${userId}:selected_cards`);
+  return cards ? JSON.parse(cards) : [];
+}
+
+async function clearSelectedCards(userId) {
+  await redis.del(`user:${userId}:selected_cards`);
+}
+
+async function setUserRoom(userId, roomId) {
+  await redis.set(`user:${userId}:current_room`, roomId);
+  // Set TTL for 4 hours
+  await redis.expire(`user:${userId}:current_room`, 14400);
+}
+
+async function getUserRoom(userId) {
+  return await redis.get(`user:${userId}:current_room`);
+}
+
+async function createCardSelectionMarkup(hand, userId) {
+  const userSelected = await getSelectedCards(userId);
   
   const cardButtons = hand.map(card => ({
     text: `${card} ${userSelected.includes(card) ? '✅' : ''}`,
@@ -18,12 +43,18 @@ function createCardSelectionMarkup(hand, userId) {
     cardRows.push(cardButtons.slice(i, i + 4));
   }
 
+  const miniAppButton = [{
+    text: '🎧 Start Audio',
+    web_app: { url: 'https://your-mini-app-url.com' }
+  }];
+
   const controlButtons = [
     [{ text: '🔄 Clear Selection', callback_data: 'clear_selection' }],
     [
       { text: '🎴 Pick', callback_data: 'pick_card' },
       { text: '⬇️ Drop Selected', callback_data: 'drop_cards' }
-    ]
+    ],
+    miniAppButton
   ];
 
   return Markup.inlineKeyboard([
@@ -41,7 +72,7 @@ async function displayPlayerInterface(ctx, roomId, userId) {
       return;
     }
 
-    userRoomMap.set(userId, roomId);
+    await setUserRoom(userId, roomId);
 
     await ctx.telegram.sendMessage(
       userId,
@@ -49,7 +80,7 @@ async function displayPlayerInterface(ctx, roomId, userId) {
       `Select cards in order to play them:`,
       {
         parse_mode: 'Markdown',
-        ...createCardSelectionMarkup(player.hand, userId)
+        ...await createCardSelectionMarkup(player.hand, userId)
       }
     );
 
@@ -63,7 +94,7 @@ async function handleCardSelection(ctx) {
     const userId = ctx.from.id;
     const card = ctx.callbackQuery.data.split('_')[2];
     
-    let userSelected = selectedCards.get(userId) || [];
+    let userSelected = await getSelectedCards(userId);
     
     if (userSelected.includes(card)) {
       userSelected = userSelected.filter(c => c !== card);
@@ -71,15 +102,15 @@ async function handleCardSelection(ctx) {
       userSelected.push(card);
     }
     
-    selectedCards.set(userId, userSelected);
+    await setSelectedCards(userId, userSelected);
+    const roomId = await getUserRoom(userId);
+    const room = await Room.getRoom(roomId);
 
-    // Update existing message's markup instead of sending new message
     await ctx.editMessageReplyMarkup(
-      createCardSelectionMarkup(
-        (await Room.getRoom(userRoomMap.get(userId))).clientRoom.playerList
-          .find(p => p.userId === userId).hand,
+      (await createCardSelectionMarkup(
+        room.clientRoom.playerList.find(p => p.userId === userId).hand,
         userId
-      ).reply_markup
+      )).reply_markup
     );
 
     await ctx.answerCbQuery();
@@ -93,15 +124,15 @@ async function handleCardSelection(ctx) {
 async function handleClearSelection(ctx) {
   try {
     const userId = ctx.from.id;
-    selectedCards.delete(userId);
+    await clearSelectedCards(userId);
+    const roomId = await getUserRoom(userId);
+    const room = await Room.getRoom(roomId);
 
-    // Update existing message's markup
     await ctx.editMessageReplyMarkup(
-      createCardSelectionMarkup(
-        (await Room.getRoom(userRoomMap.get(userId))).clientRoom.playerList
-          .find(p => p.userId === userId).hand,
+      (await createCardSelectionMarkup(
+        room.clientRoom.playerList.find(p => p.userId === userId).hand,
         userId
-      ).reply_markup
+      )).reply_markup
     );
 
     await ctx.answerCbQuery('Selection cleared');
@@ -115,12 +146,12 @@ async function handleClearSelection(ctx) {
 async function handlePickCard(ctx) {
   try {
     const userId = ctx.from.id;
-    const roomId = userRoomMap.get(userId);
+    const roomId = await getUserRoom(userId);
     let action = 'pick';
+    
     await ctx.answerCbQuery('Picked a card');
     await Room.makeMove(roomId, userId, action);
 
-    // Update interface after picking
     const room = await Room.getRoom(roomId);
     const roomHandler = require('./roomHandler');
     await roomHandler.handleRoomDisplay(ctx, roomId);
@@ -134,18 +165,17 @@ async function handlePickCard(ctx) {
 async function handleDropCards(ctx) {
   try {
     const userId = ctx.from.id;
-    const userSelected = selectedCards.get(userId) || [];
-    const roomId = userRoomMap.get(userId);
+    const userSelected = await getSelectedCards(userId);
+    const roomId = await getUserRoom(userId);
     let action = 'drop';
     
     if (userSelected.length === 0) {
       return await ctx.answerCbQuery('No cards selected!');
     }
 
-    selectedCards.delete(userId);
+    await clearSelectedCards(userId);
     await Room.makeMove(roomId, userId, action, userSelected);
 
-    // Update all players' interfaces after dropping cards
     const roomHandler = require('./roomHandler');
     await roomHandler.handleRoomDisplay(ctx, roomId);
 
@@ -153,7 +183,7 @@ async function handleDropCards(ctx) {
 
   } catch (error) {
     console.error('Error dropping cards:', error);
-    await ctx.answerCbQuery('Error dropping cards');
+    await ctx.answerCbQuery(error.toString());
   }
 }
 

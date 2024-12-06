@@ -17,8 +17,9 @@ const {
   handleDropCards
 } = require('./handlers/userHandler');
 const { handleChat } = require('./handlers/chatHandler');
-
 require('dotenv').config();
+const Redis = require('ioredis');
+const redis = new Redis(`${process.env.REDIS}`);
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
@@ -28,6 +29,10 @@ bot.command('start', async (ctx) => {
   
   if (startPayload && startPayload.startsWith('join_')) {
     const roomId = startPayload.replace('join_', '');
+    const userId = ctx.from.id;
+    await redis.set(`user:${userId}:room`, roomId);
+    // Set TTL for 4 hours
+    await redis.expire(`user:${userId}:room`, 14400);
     await handleJoinRoom(ctx, roomId);
   } else {
     await handleWelcome(ctx);
@@ -56,11 +61,19 @@ bot.catch((err, ctx) => {
   console.error(`Error for ${ctx.updateType}:`, err);
 });
 
+// Graceful Redis shutdown
+const gracefulShutdown = async () => {
+  console.log('Shutting down...');
+  await redis.quit();
+  await bot.stop('SIGTERM');
+  process.exit(0);
+};
+
 // Start bot
 bot.launch()
   .then(() => console.log('Bot started'))
   .catch(err => console.error('Bot startup error:', err));
 
 // Enable graceful stop
-process.once('SIGINT', () => bot.stop('SIGINT'));
-process.once('SIGTERM', () => bot.stop('SIGTERM'))
+process.once('SIGINT', gracefulShutdown);
+process.once('SIGTERM', gracefulShutdown);
